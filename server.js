@@ -28,6 +28,7 @@ const auth = new google.auth.GoogleAuth({
         token_uri: credentials.token_uri,
         auth_provider_x509_cert_url: credentials.auth_provider_x509_cert_url,
         client_x509_cert_url: credentials.client_x509_cert_url,
+        universe_domain: credentials.universe_domain
     },
     scopes: ['https://www.googleapis.com/auth/spreadsheets']
 });

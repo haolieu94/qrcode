@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QR Code Scanner</title>
-    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode/minified/html5-qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.0.9/dist/html5-qrcode.min.js"></script> <!-- It should be reverted back previous version if it makes slow camera scanning processing -->
     <style>
         #reader {
             width: 100%;
@@ -48,74 +48,115 @@
     <div id="popup">QR Code scanned successfully!</div>
 
     <script>
-        // Tạo đối tượng Audio để phát âm thanh từ thư mục audio
-        const beepSound = new Audio('audio/beep.mp3'); // Đảm bảo đường dẫn chính xác đến tệp âm thanh
+        const beepSound = new Audio('../audio/beep.mp3'); // Ensure the correct path for the audio file
+        const html5QrCode = new Html5Qrcode("reader");
+        const popup = document.getElementById('popup');
+        const resultElement = document.getElementById('result');
 
-        function onScanSuccess(decodedText, decodedResult) {
-            // Phát âm thanh khi quét thành công
+        // Play sound after QR code is successfully scanned
+        function playBeepSound() {
             beepSound.play().then(() => {
                 console.log('Beep sound played successfully.');
             }).catch(err => {
                 console.error('Error playing beep sound:', err);
             });
+        }
 
-            // Hiển thị nội dung mã QR đã quét
-            document.getElementById('result').innerText = `QR Code content: ${decodedText}`;
-
-            // Hiển thị popup
-            const popup = document.getElementById('popup');
+        // Display popup message
+        function showPopup(message, duration = 2000) {
+            popup.innerText = message;
             popup.classList.add('show');
 
-            // Tắt popup sau 2 giây
+            // Hide popup after specified duration
             setTimeout(() => {
                 popup.classList.remove('show');
-            }, 2000);
+            }, duration);
+        }
 
-            // Ngừng quét sau khi quét thành công
-            html5QrCode.stop().then(() => {
-                console.log("QR Code scan stopped.");
-            }).catch((err) => {
-                console.error("Error stopping the QR code scanner:", err);
-            });
+        // Display scanned result
+        function displayResult(decodedText) {
+            resultElement.innerText = `QR Code content: ${decodedText}`;
+        }
 
-            // Gửi kết quả quét đến máy chủ để lưu vào Google Sheets
-            fetch('/append-result', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ result: decodedText }),
-            }).then(response => response.json())
-                .then(data => {
-                    console.log('Server response:', data);
-                }).catch(error => {
-                    console.error('Error sending result to server:', error);
+        // Send QR code data to the server and wait 1-2 seconds after completion
+        async function sendResultToServer(decodedText) {
+            try {
+                const response = await fetch('/append-result', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ result: decodedText }),
                 });
+                
+                const data = await response.json();
+                console.log('Server response:', data);
+
+                // Wait for 5 seconds after the request is complete
+                await wait(5000);
+                console.log('Waited 5 seconds after sending result to server.');
+
+                // Continue scanning QR code
+                startScanning();
+            } catch (error) {
+                console.error('Error sending result to server:', error);
+            }
         }
 
-        function onScanError(errorMessage) {
-            // Ghi lại lỗi quét mã QR
-            console.error(`QR code scan error: ${errorMessage}`);
+        // Wait function to introduce delay
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
         }
 
+        // Handle QR code scan success
+        async function onScanSuccess(decodedText) {
+            // Play sound, show popup, and display result
+            playBeepSound();
+            displayResult(decodedText);
+            showPopup('QR Code scanned successfully!', 2000);
+            
+            // Optionally, stop scanning after a successful scan
+            stopScanning();  
+
+            // Send scan result to the server and wait
+            await sendResultToServer(decodedText);
+
+            
+        }
+
+        // Start the QR code scanner
         function startScanning() {
             if (typeof Html5Qrcode === 'undefined') {
                 console.error('Html5Qrcode is not defined. Please ensure the script is loaded correctly.');
                 return;
             }
 
-            const html5QrCode = new Html5Qrcode("reader");
-
             html5QrCode.start(
-                { facingMode: "environment" }, // Camera phía sau
-                { fps: 10 },
-                onScanSuccess,
-                onScanError
+                { facingMode: "environment" }, // Use the rear camera
+                { 
+                    fps: 40 // Increase FPS for faster detection
+                    // qrbox: { width: 250, height: 250 }, // Define a specific scanning area for better performance
+                    // aspectRatio: 1.0 // Square scanning box 
+            },
+                onScanSuccess
             ).catch(err => {
                 console.error("Error starting the QR code scanner:", err);
             });
         }
 
+       
+        // Optionally, stop the QR code scanner
+        function stopScanning() {
+            html5QrCode.stop()
+                .then(() => {
+                    console.log("QR Code scan stopped.");
+                })
+                .catch(err => {
+                    console.error("Error stopping the QR code scanner:", err);
+                });
+        }
+
+        // Initialize scanning when the DOM is fully loaded
         document.addEventListener('DOMContentLoaded', () => {
             startScanning();
         });
